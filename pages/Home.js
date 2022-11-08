@@ -1,8 +1,11 @@
 /* eslint-disable*/
 
 import {useEffect, useState} from 'react';
-import {View, Image, StyleSheet, Button, Alert} from 'react-native';
+import {View, Image, StyleSheet, Button, Alert, isFocused} from 'react-native';
 import {TextInput} from 'react-native-gesture-handler';
+import {openDatabase} from 'react-native-sqlite-storage';
+
+var db = openDatabase({name: 'LogBookExcerciseDatabase.db'});
 
 function Home() {
   const [index, setIndex] = useState(0);
@@ -12,6 +15,27 @@ function Home() {
   // ];
   const [imgInput, setImgInput] = useState('');
   const [newArray, setNewArray] = useState([]);
+
+  useEffect(() => {
+    db.transaction(function (txn) {
+      txn.executeSql(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='Image_Table'",
+        [],
+        function (tx, res) {
+          if (res.rows.length == 0) {
+            console.log('item:', res.rows.length);
+            if (res.rows.length == 0) {
+              txn.executeSql('DROP TABLE IF EXISTS Image_Table', []);
+              txn.executeSql(
+                'CREATE TABLE IF NOT EXISTS Image_Table(id INTEGER PRIMARY KEY AUTOINCREMENT, image_link VARCHAR(255))',
+                [],
+              );
+            }
+          }
+        },
+      );
+    });
+  }, []);
 
   const preImage = () => {
     if (index == 0) {
@@ -32,17 +56,56 @@ function Home() {
     }
   };
 
-  const addImage = input => {
-    if (input.match(/(http(s?):)([/|.|\w|\s|-])*.(?:jpg|gif|png)/g) === null) {
+  // const addImage = input => {
+  //   if (input.match(/(http(s?):)([/|.|\w|\s|-])*.(?:jpg|gif|png)/g) === null) {
+  //     Alert.alert('Image url is invalid!');
+  //     return;
+  //   } else {
+  //     newArray.push(input);
+  //     setImgInput('');
+  //     Alert.alert('Image add successfully');
+  //     return newArray;
+  //   }
+  // };
+  const addImage = () => {
+    if (
+      imgInput.match(/(http(s?):)([/|.|\w|\s|-])*.(?:jpg|gif|png)/g) === null
+    ) {
       Alert.alert('Image url is invalid!');
       return;
     } else {
-      newArray.push(input);
-      setImgInput('');
-      Alert.alert('Image add successfully');
-      return newArray;
+      db.transaction(function (tx) {
+        tx.executeSql(
+          'INSERT INTO Image_Table (image_link) VALUES (?)',
+          [imgInput],
+          (tx, results) => {
+            console.log('Results', results.rowsAffected);
+            if (results.rowsAffected > 0) {
+              Alert.alert('Image Inserted Successfully....');
+            } else Alert.alert('Failed....');
+          },
+        );
+      });
+      getData();
     }
   };
+
+  const getData = () => {
+    db.transaction(tx => {
+      tx.executeSql('SELECT * FROM Image_Table', [], (tx, results) => {
+        var temp = [];
+        for (let i = 0; i < results.rows.length; ++i)
+          temp.push(results.rows.item(i));
+        setImgInput('');
+        setNewArray(temp);
+        console.log('check: ', temp);
+      });
+    });
+  };
+
+  useEffect(() => {
+    getData();
+  }, []);
 
   return (
     <View>
@@ -53,9 +116,7 @@ function Home() {
         value={imgInput}></TextInput>
       <Image
         style={styles.tinyLogo}
-        source={{
-          uri: newArray[index],
-        }}
+        source={{uri: newArray[index]?.image_link}}
       />
       <View style={styles.container}>
         <View style={{width: '40%'}}>
@@ -72,7 +133,7 @@ function Home() {
           flexDirection: 'row',
         }}>
         <View style={{width: '40%'}}>
-          <Button title="Add Image" onPress={() => addImage(imgInput)}></Button>
+          <Button title="Add Image" onPress={addImage}></Button>
         </View>
       </View>
     </View>
